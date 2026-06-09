@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { toast } from 'react-toastify';
-import { getHotels, createHotel, deleteHotel, addRoom, addTimeSlot } from '../services/api';
+import { getHotels, createHotel, deleteHotel, addRoom, addTimeSlot, updateHotel, updateRoom, deleteRoom, deleteTimeSlot } from '../services/api';
 
 export default function Hotels() {
   const [hotels, setHotels] = useState([]);
@@ -10,6 +10,8 @@ export default function Hotels() {
   const [showSlotModal, setShowSlotModal] = useState(false);
   const [selectedHotelID, setSelectedHotelID] = useState(null);
   const [selectedRoomID, setSelectedRoomID] = useState(null);
+  const [editingHotel, setEditingHotel] = useState(null);
+  const [editingRoom, setEditingRoom] = useState(null);
   const [hotelForm, setHotelForm] = useState({ hotelName: '', address: '' });
   const [roomForm, setRoomForm] = useState({ roomName: '' });
   const [slotForm, setSlotForm] = useState({ timeFrom: '', timeTo: '' });
@@ -27,23 +29,35 @@ export default function Hotels() {
   const handleAddHotel = async () => {
     if (!hotelForm.hotelName) return toast.error('Hotel name is required');
     try {
-      await createHotel(hotelForm);
-      toast.success('Hotel added successfully!');
+      if (editingHotel) {
+        await updateHotel(editingHotel.hotelID, hotelForm);
+        toast.success('Hotel updated successfully!');
+      } else {
+        await createHotel(hotelForm);
+        toast.success('Hotel added successfully!');
+      }
       setShowHotelModal(false);
       setHotelForm({ hotelName: '', address: '' });
+      setEditingHotel(null);
       fetchHotels();
-    } catch { toast.error('Failed to add hotel'); }
+    } catch { toast.error('Failed to save hotel'); }
   };
 
   const handleAddRoom = async () => {
     if (!roomForm.roomName) return toast.error('Room name is required');
     try {
-      await addRoom({ roomName: roomForm.roomName, hotelID: selectedHotelID });
-      toast.success('Room added successfully!');
+      if (editingRoom) {
+        await updateRoom(editingRoom.roomID, { roomName: roomForm.roomName, hotelID: selectedHotelID });
+        toast.success('Room updated successfully!');
+      } else {
+        await addRoom({ roomName: roomForm.roomName, hotelID: selectedHotelID });
+        toast.success('Room added successfully!');
+      }
       setShowRoomModal(false);
       setRoomForm({ roomName: '' });
+      setEditingRoom(null);
       fetchHotels();
-    } catch { toast.error('Failed to add room'); }
+    } catch { toast.error('Failed to save room'); }
   };
 
   const handleAddSlot = async () => {
@@ -66,6 +80,37 @@ export default function Hotels() {
     } catch { toast.error('Failed to delete hotel'); }
   };
 
+  const handleDeleteRoom = async (id) => {
+    if (!window.confirm('Are you sure you want to delete this room?')) return;
+    try {
+      await deleteRoom(id);
+      toast.success('Room deleted!');
+      fetchHotels();
+    } catch { toast.error('Failed to delete room'); }
+  };
+
+  const handleDeleteSlot = async (id) => {
+    if (!window.confirm('Delete this time slot?')) return;
+    try {
+      await deleteTimeSlot(id);
+      toast.success('Time slot deleted!');
+      fetchHotels();
+    } catch { toast.error('Failed to delete time slot'); }
+  };
+
+  const openEditHotel = (hotel) => {
+    setEditingHotel(hotel);
+    setHotelForm({ hotelName: hotel.hotelName, address: hotel.address || '' });
+    setShowHotelModal(true);
+  };
+
+  const openEditRoom = (room, hotelID) => {
+    setEditingRoom(room);
+    setSelectedHotelID(hotelID);
+    setRoomForm({ roomName: room.roomName });
+    setShowRoomModal(true);
+  };
+
   if (loading) return (
     <div className="text-center py-5">
       <div className="spinner-border text-primary" role="status"></div>
@@ -78,7 +123,7 @@ export default function Hotels() {
         <h2 className="fw-bold" style={{ color: '#1a1a2e' }}>
           <i className="fas fa-hotel me-2"></i>Hotels & Conference Rooms
         </h2>
-        <button className="btn btn-primary" onClick={() => setShowHotelModal(true)}>
+        <button className="btn btn-primary" onClick={() => { setEditingHotel(null); setHotelForm({ hotelName: '', address: '' }); setShowHotelModal(true); }}>
           <i className="fas fa-plus me-2"></i>Add Hotel
         </button>
       </div>
@@ -100,8 +145,11 @@ export default function Hotels() {
               </div>
               <div>
                 <button className="btn btn-sm btn-light me-2"
-                  onClick={() => { setSelectedHotelID(hotel.hotelID); setShowRoomModal(true); }}>
+                  onClick={() => { setSelectedHotelID(hotel.hotelID); setEditingRoom(null); setRoomForm({ roomName: '' }); setShowRoomModal(true); }}>
                   <i className="fas fa-plus me-1"></i>Add Room
+                </button>
+                <button className="btn btn-sm btn-warning me-2" onClick={() => openEditHotel(hotel)}>
+                  <i className="fas fa-edit"></i>
                 </button>
                 <button className="btn btn-sm btn-danger" onClick={() => handleDeleteHotel(hotel.hotelID)}>
                   <i className="fas fa-trash"></i>
@@ -121,10 +169,20 @@ export default function Hotels() {
                             <h6 className="fw-bold mb-0">
                               <i className="fas fa-door-open me-2 text-primary"></i>{room.roomName}
                             </h6>
-                            <button className="btn btn-sm btn-outline-primary"
-                              onClick={() => { setSelectedRoomID(room.roomID); setShowSlotModal(true); }}>
-                              <i className="fas fa-plus"></i>
-                            </button>
+                            <div>
+                              <button className="btn btn-sm btn-outline-primary me-1"
+                                onClick={() => { setSelectedRoomID(room.roomID); setSlotForm({ timeFrom: '', timeTo: '' }); setShowSlotModal(true); }}>
+                                <i className="fas fa-plus"></i>
+                              </button>
+                              <button className="btn btn-sm btn-outline-warning me-1"
+                                onClick={() => openEditRoom(room, hotel.hotelID)}>
+                                <i className="fas fa-edit"></i>
+                              </button>
+                              <button className="btn btn-sm btn-outline-danger"
+                                onClick={() => handleDeleteRoom(room.roomID)}>
+                                <i className="fas fa-trash"></i>
+                              </button>
+                            </div>
                           </div>
                           <div className="d-flex flex-wrap gap-1">
                             {room.roomTimeSlots.length === 0 ? (
@@ -132,8 +190,11 @@ export default function Hotels() {
                             ) : (
                               room.roomTimeSlots.map(slot => (
                                 <span key={slot.slotID}
-                                  className={`badge ${slot.isAvailable ? 'bg-success' : 'bg-danger'}`}>
-                                  {slot.timeFrom.substring(0, 5)} - {slot.timeTo.substring(0, 5)}
+                                  className={`badge ${slot.isAvailable ? 'bg-success' : 'bg-danger'}`}
+                                  style={{ cursor: 'pointer' }}
+                                  onClick={() => handleDeleteSlot(slot.slotID)}
+                                  title="Click to delete">
+                                  {slot.timeFrom.substring(0, 5)} - {slot.timeTo.substring(0, 5)} ×
                                 </span>
                               ))
                             )}
@@ -149,13 +210,16 @@ export default function Hotels() {
         ))
       )}
 
-      {/* Add Hotel Modal */}
+      {/* Add/Edit Hotel Modal */}
       {showHotelModal && (
         <div className="modal show d-block" style={{ backgroundColor: 'rgba(0,0,0,0.5)' }}>
           <div className="modal-dialog">
             <div className="modal-content">
               <div className="modal-header" style={{ backgroundColor: '#1a1a2e', color: 'white' }}>
-                <h5 className="modal-title"><i className="fas fa-hotel me-2"></i>Add New Hotel</h5>
+                <h5 className="modal-title">
+                  <i className="fas fa-hotel me-2"></i>
+                  {editingHotel ? 'Edit Hotel' : 'Add New Hotel'}
+                </h5>
                 <button className="btn-close btn-close-white" onClick={() => setShowHotelModal(false)}></button>
               </div>
               <div className="modal-body">
@@ -175,7 +239,8 @@ export default function Hotels() {
               <div className="modal-footer">
                 <button className="btn btn-secondary" onClick={() => setShowHotelModal(false)}>Cancel</button>
                 <button className="btn btn-primary" onClick={handleAddHotel}>
-                  <i className="fas fa-plus me-2"></i>Add Hotel
+                  <i className={`fas ${editingHotel ? 'fa-save' : 'fa-plus'} me-2`}></i>
+                  {editingHotel ? 'Update Hotel' : 'Add Hotel'}
                 </button>
               </div>
             </div>
@@ -183,13 +248,16 @@ export default function Hotels() {
         </div>
       )}
 
-      {/* Add Room Modal */}
+      {/* Add/Edit Room Modal */}
       {showRoomModal && (
         <div className="modal show d-block" style={{ backgroundColor: 'rgba(0,0,0,0.5)' }}>
           <div className="modal-dialog">
             <div className="modal-content">
               <div className="modal-header" style={{ backgroundColor: '#1a1a2e', color: 'white' }}>
-                <h5 className="modal-title"><i className="fas fa-door-open me-2"></i>Add Conference Room</h5>
+                <h5 className="modal-title">
+                  <i className="fas fa-door-open me-2"></i>
+                  {editingRoom ? 'Edit Room' : 'Add Conference Room'}
+                </h5>
                 <button className="btn-close btn-close-white" onClick={() => setShowRoomModal(false)}></button>
               </div>
               <div className="modal-body">
@@ -203,7 +271,8 @@ export default function Hotels() {
               <div className="modal-footer">
                 <button className="btn btn-secondary" onClick={() => setShowRoomModal(false)}>Cancel</button>
                 <button className="btn btn-primary" onClick={handleAddRoom}>
-                  <i className="fas fa-plus me-2"></i>Add Room
+                  <i className={`fas ${editingRoom ? 'fa-save' : 'fa-plus'} me-2`}></i>
+                  {editingRoom ? 'Update Room' : 'Add Room'}
                 </button>
               </div>
             </div>

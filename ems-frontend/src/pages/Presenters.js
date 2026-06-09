@@ -1,13 +1,14 @@
 import React, { useState, useEffect } from 'react';
 import { toast } from 'react-toastify';
 import Select from 'react-select';
-import { getPresenters, createPresenter, deletePresenter, getSectors } from '../services/api';
+import { getPresenters, createPresenter, deletePresenter, getSectors, updatePresenter } from '../services/api';
 
 export default function Presenters() {
   const [presenters, setPresenters] = useState([]);
   const [sectors, setSectors] = useState([]);
   const [loading, setLoading] = useState(true);
   const [showModal, setShowModal] = useState(false);
+  const [editingPresenter, setEditingPresenter] = useState(null);
   const [form, setForm] = useState({ name: '', mobile: '' });
   const [sectorRows, setSectorRows] = useState([{ sectorID: null, timeFrom: '', timeTo: '' }]);
 
@@ -30,28 +31,51 @@ export default function Presenters() {
     setSectorRows(updated);
   };
 
+  const openAddModal = () => {
+    setEditingPresenter(null);
+    setForm({ name: '', mobile: '' });
+    setSectorRows([{ sectorID: null, timeFrom: '', timeTo: '' }]);
+    setShowModal(true);
+  };
+
+  const openEditModal = (presenter) => {
+    setEditingPresenter(presenter);
+    setForm({ name: presenter.name, mobile: presenter.mobile });
+    setSectorRows(presenter.presenterSectors.map(s => ({
+      sectorID: s.sectorID,
+      timeFrom: s.timeFrom.substring(0, 5),
+      timeTo: s.timeTo.substring(0, 5)
+    })));
+    setShowModal(true);
+  };
+
   const handleSubmit = async () => {
     if (!form.name) return toast.error('Name is required');
     if (!form.mobile) return toast.error('Mobile is required');
     if (sectorRows.some(r => !r.sectorID || !r.timeFrom || !r.timeTo))
       return toast.error('Please complete all sector rows');
 
+    const payload = {
+      name: form.name,
+      mobile: form.mobile,
+      presenterSectors: sectorRows.map(r => ({
+        sectorID: r.sectorID,
+        timeFrom: r.timeFrom + ':00',
+        timeTo: r.timeTo + ':00'
+      }))
+    };
+
     try {
-      await createPresenter({
-        name: form.name,
-        mobile: form.mobile,
-        presenterSectors: sectorRows.map(r => ({
-          sectorID: r.sectorID,
-          timeFrom: r.timeFrom + ':00',
-          timeTo: r.timeTo + ':00'
-        }))
-      });
-      toast.success('Presenter added successfully!');
+      if (editingPresenter) {
+        await updatePresenter(editingPresenter.presenterID, payload);
+        toast.success('Presenter updated successfully!');
+      } else {
+        await createPresenter(payload);
+        toast.success('Presenter added successfully!');
+      }
       setShowModal(false);
-      setForm({ name: '', mobile: '' });
-      setSectorRows([{ sectorID: null, timeFrom: '', timeTo: '' }]);
       fetchData();
-    } catch { toast.error('Failed to add presenter'); }
+    } catch { toast.error('Failed to save presenter'); }
   };
 
   const handleDelete = async (id) => {
@@ -71,7 +95,7 @@ export default function Presenters() {
         <h2 className="fw-bold" style={{ color: '#1a1a2e' }}>
           <i className="fas fa-microphone me-2"></i>Presenters
         </h2>
-        <button className="btn btn-primary" onClick={() => setShowModal(true)}>
+        <button className="btn btn-primary" onClick={openAddModal}>
           <i className="fas fa-plus me-2"></i>Add Presenter
         </button>
       </div>
@@ -94,13 +118,21 @@ export default function Presenters() {
                         <i className="fas fa-phone me-1"></i>{presenter.mobile}
                       </p>
                     </div>
-                    <button className="btn btn-sm btn-outline-danger" onClick={() => handleDelete(presenter.presenterID)}>
-                      <i className="fas fa-trash"></i>
-                    </button>
+                    <div>
+                      <button className="btn btn-sm btn-outline-warning me-2"
+                        onClick={() => openEditModal(presenter)}>
+                        <i className="fas fa-edit"></i>
+                      </button>
+                      <button className="btn btn-sm btn-outline-danger"
+                        onClick={() => handleDelete(presenter.presenterID)}>
+                        <i className="fas fa-trash"></i>
+                      </button>
+                    </div>
                   </div>
                   <div className="d-flex flex-wrap gap-1">
                     {presenter.presenterSectors.map(s => (
-                      <span key={s.presenterSectorID} className="badge bg-purple" style={{ backgroundColor: '#7209b7' }}>
+                      <span key={s.presenterSectorID} className="badge"
+                        style={{ backgroundColor: '#7209b7' }}>
                         {s.sectorName} ({s.timeFrom.substring(0, 5)} - {s.timeTo.substring(0, 5)})
                       </span>
                     ))}
@@ -117,7 +149,10 @@ export default function Presenters() {
           <div className="modal-dialog modal-lg">
             <div className="modal-content">
               <div className="modal-header" style={{ backgroundColor: '#1a1a2e', color: 'white' }}>
-                <h5 className="modal-title"><i className="fas fa-microphone me-2"></i>Add New Presenter</h5>
+                <h5 className="modal-title">
+                  <i className="fas fa-microphone me-2"></i>
+                  {editingPresenter ? 'Edit Presenter' : 'Add New Presenter'}
+                </h5>
                 <button className="btn-close btn-close-white" onClick={() => setShowModal(false)}></button>
               </div>
               <div className="modal-body">
@@ -147,6 +182,7 @@ export default function Presenters() {
                       <Select
                         options={sectors}
                         placeholder="Select sector..."
+                        value={sectors.find(s => s.value === row.sectorID) || null}
                         onChange={opt => updateSectorRow(index, 'sectorID', opt.value)}
                       />
                     </div>
@@ -173,7 +209,8 @@ export default function Presenters() {
               <div className="modal-footer">
                 <button className="btn btn-secondary" onClick={() => setShowModal(false)}>Cancel</button>
                 <button className="btn btn-primary" onClick={handleSubmit}>
-                  <i className="fas fa-save me-2"></i>Save Presenter
+                  <i className={`fas ${editingPresenter ? 'fa-save' : 'fa-plus'} me-2`}></i>
+                  {editingPresenter ? 'Update Presenter' : 'Save Presenter'}
                 </button>
               </div>
             </div>

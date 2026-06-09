@@ -1,13 +1,14 @@
 import React, { useState, useEffect } from 'react';
 import { toast } from 'react-toastify';
 import Select from 'react-select';
-import { getInvestors, createInvestor, deleteInvestor, getSectors } from '../services/api';
+import { getInvestors, createInvestor, deleteInvestor, getSectors, updateInvestor } from '../services/api';
 
 export default function Investors() {
   const [investors, setInvestors] = useState([]);
   const [sectors, setSectors] = useState([]);
   const [loading, setLoading] = useState(true);
   const [showModal, setShowModal] = useState(false);
+  const [editingInvestor, setEditingInvestor] = useState(null);
   const [form, setForm] = useState({ name: '', mobile: '' });
   const [sectorRows, setSectorRows] = useState([{ sectorID: null, timeFrom: '', timeTo: '' }]);
 
@@ -30,28 +31,51 @@ export default function Investors() {
     setSectorRows(updated);
   };
 
+  const openAddModal = () => {
+    setEditingInvestor(null);
+    setForm({ name: '', mobile: '' });
+    setSectorRows([{ sectorID: null, timeFrom: '', timeTo: '' }]);
+    setShowModal(true);
+  };
+
+  const openEditModal = (investor) => {
+    setEditingInvestor(investor);
+    setForm({ name: investor.name, mobile: investor.mobile });
+    setSectorRows(investor.investorSectors.map(s => ({
+      sectorID: s.sectorID,
+      timeFrom: s.timeFrom.substring(0, 5),
+      timeTo: s.timeTo.substring(0, 5)
+    })));
+    setShowModal(true);
+  };
+
   const handleSubmit = async () => {
     if (!form.name) return toast.error('Name is required');
     if (!form.mobile) return toast.error('Mobile is required');
     if (sectorRows.some(r => !r.sectorID || !r.timeFrom || !r.timeTo))
       return toast.error('Please complete all sector rows');
 
+    const payload = {
+      name: form.name,
+      mobile: form.mobile,
+      investorSectors: sectorRows.map(r => ({
+        sectorID: r.sectorID,
+        timeFrom: r.timeFrom + ':00',
+        timeTo: r.timeTo + ':00'
+      }))
+    };
+
     try {
-      await createInvestor({
-        name: form.name,
-        mobile: form.mobile,
-        investorSectors: sectorRows.map(r => ({
-          sectorID: r.sectorID,
-          timeFrom: r.timeFrom + ':00',
-          timeTo: r.timeTo + ':00'
-        }))
-      });
-      toast.success('Investor added successfully!');
+      if (editingInvestor) {
+        await updateInvestor(editingInvestor.investorID, payload);
+        toast.success('Investor updated successfully!');
+      } else {
+        await createInvestor(payload);
+        toast.success('Investor added successfully!');
+      }
       setShowModal(false);
-      setForm({ name: '', mobile: '' });
-      setSectorRows([{ sectorID: null, timeFrom: '', timeTo: '' }]);
       fetchData();
-    } catch { toast.error('Failed to add investor'); }
+    } catch { toast.error('Failed to save investor'); }
   };
 
   const handleDelete = async (id) => {
@@ -71,7 +95,7 @@ export default function Investors() {
         <h2 className="fw-bold" style={{ color: '#1a1a2e' }}>
           <i className="fas fa-briefcase me-2"></i>Investors
         </h2>
-        <button className="btn btn-primary" onClick={() => setShowModal(true)}>
+        <button className="btn btn-primary" onClick={openAddModal}>
           <i className="fas fa-plus me-2"></i>Add Investor
         </button>
       </div>
@@ -94,9 +118,16 @@ export default function Investors() {
                         <i className="fas fa-phone me-1"></i>{investor.mobile}
                       </p>
                     </div>
-                    <button className="btn btn-sm btn-outline-danger" onClick={() => handleDelete(investor.investorID)}>
-                      <i className="fas fa-trash"></i>
-                    </button>
+                    <div>
+                      <button className="btn btn-sm btn-outline-warning me-2"
+                        onClick={() => openEditModal(investor)}>
+                        <i className="fas fa-edit"></i>
+                      </button>
+                      <button className="btn btn-sm btn-outline-danger"
+                        onClick={() => handleDelete(investor.investorID)}>
+                        <i className="fas fa-trash"></i>
+                      </button>
+                    </div>
                   </div>
                   <div className="d-flex flex-wrap gap-1">
                     {investor.investorSectors.map(s => (
@@ -117,7 +148,10 @@ export default function Investors() {
           <div className="modal-dialog modal-lg">
             <div className="modal-content">
               <div className="modal-header" style={{ backgroundColor: '#1a1a2e', color: 'white' }}>
-                <h5 className="modal-title"><i className="fas fa-briefcase me-2"></i>Add New Investor</h5>
+                <h5 className="modal-title">
+                  <i className="fas fa-briefcase me-2"></i>
+                  {editingInvestor ? 'Edit Investor' : 'Add New Investor'}
+                </h5>
                 <button className="btn-close btn-close-white" onClick={() => setShowModal(false)}></button>
               </div>
               <div className="modal-body">
@@ -147,6 +181,7 @@ export default function Investors() {
                       <Select
                         options={sectors}
                         placeholder="Select sector..."
+                        value={sectors.find(s => s.value === row.sectorID) || null}
                         onChange={opt => updateSectorRow(index, 'sectorID', opt.value)}
                       />
                     </div>
@@ -173,7 +208,8 @@ export default function Investors() {
               <div className="modal-footer">
                 <button className="btn btn-secondary" onClick={() => setShowModal(false)}>Cancel</button>
                 <button className="btn btn-primary" onClick={handleSubmit}>
-                  <i className="fas fa-save me-2"></i>Save Investor
+                  <i className={`fas ${editingInvestor ? 'fa-save' : 'fa-plus'} me-2`}></i>
+                  {editingInvestor ? 'Update Investor' : 'Save Investor'}
                 </button>
               </div>
             </div>
