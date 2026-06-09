@@ -118,9 +118,9 @@ namespace EMS.API.Controllers
 
         // POST: api/reservations
         [HttpPost]
+        [HttpPost]
         public async Task<ActionResult<ReservationResponseDTO>> CreateReservation(CreateReservationDTO dto)
         {
-            // Use transaction to prevent double booking
             using var transaction = await _context.Database.BeginTransactionAsync();
 
             try
@@ -134,21 +134,33 @@ namespace EMS.API.Controllers
                 if (slot == null) return NotFound("Time slot not found");
                 if (!slot.IsAvailable) return BadRequest("This time slot is no longer available");
 
-                // Check investor not already booked at this time
+                // Check investor not already booked at this exact time
                 var investorBooked = await _context.Reservations
                     .Include(r => r.RoomTimeSlot)
                     .AnyAsync(r => r.InvestorID == dto.InvestorID &&
-                                   r.RoomTimeSlot.TimeFrom == slot.TimeFrom);
+                                   r.RoomTimeSlot.TimeFrom < slot.TimeTo &&
+                                   r.RoomTimeSlot.TimeTo > slot.TimeFrom);
 
-                if (investorBooked) return BadRequest("Investor is already booked at this time");
+                if (investorBooked)
+                    return BadRequest("Investor is already booked during this time slot");
 
-                // Check presenter not already booked at this time
+                // Check presenter not already booked at this exact time
                 var presenterBooked = await _context.Reservations
                     .Include(r => r.RoomTimeSlot)
                     .AnyAsync(r => r.PresenterID == dto.PresenterID &&
-                                   r.RoomTimeSlot.TimeFrom == slot.TimeFrom);
+                                   r.RoomTimeSlot.TimeFrom < slot.TimeTo &&
+                                   r.RoomTimeSlot.TimeTo > slot.TimeFrom);
 
-                if (presenterBooked) return BadRequest("Presenter is already booked at this time");
+                if (presenterBooked)
+                    return BadRequest("Presenter is already booked during this time slot");
+
+                // Check investor and presenter are not meeting each other already
+                var alreadyMeeting = await _context.Reservations
+                    .AnyAsync(r => r.InvestorID == dto.InvestorID &&
+                                   r.PresenterID == dto.PresenterID);
+
+                if (alreadyMeeting)
+                    return BadRequest("This investor and presenter already have a reservation together");
 
                 // Mark slot as unavailable
                 slot.IsAvailable = false;
@@ -187,4 +199,4 @@ namespace EMS.API.Controllers
             }
         }
     }
-}
+    }
