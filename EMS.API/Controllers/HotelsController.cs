@@ -99,5 +99,59 @@ namespace EMS.API.Controllers
 
             return NoContent();
         }
+
+
+        // PUT: api/hotels/5
+        [HttpPut("{id}")]
+        public async Task<ActionResult> UpdateHotel(int id, CreateHotelDTO dto)
+        {
+            var hotel = await _context.Hotels.FindAsync(id);
+            if (hotel == null) return NotFound();
+
+            hotel.HotelName = dto.HotelName;
+            hotel.Address = dto.Address;
+            await _context.SaveChangesAsync();
+
+            return Ok(_mapper.Map<HotelResponseDTO>(hotel));
+        }
+
+        // PUT: api/hotels/rooms/{id}
+        [HttpPut("rooms/{id}")]
+        public async Task<ActionResult> UpdateRoom(int id, CreateRoomDTO dto)
+        {
+            var room = await _context.ConferenceRooms.FindAsync(id);
+            if (room == null) return NotFound();
+
+            room.RoomName = dto.RoomName;
+            await _context.SaveChangesAsync();
+
+            return Ok(_mapper.Map<RoomResponseDTO>(room));
+        }
+
+        // DELETE: api/hotels/rooms/{id}
+        [HttpDelete("rooms/{id}")]
+        public async Task<IActionResult> DeleteRoom(int id)
+        {
+            var room = await _context.ConferenceRooms.FindAsync(id);
+            if (room == null) return NotFound();
+
+            _context.ConferenceRooms.Remove(room);
+            await _context.SaveChangesAsync();
+
+            return NoContent();
+        }
+
+        // DELETE: api/hotels/timeslots/{id}
+        [HttpDelete("timeslots/{id}")]
+        public async Task<IActionResult> DeleteTimeSlot(int id)
+        {
+            var slot = await _context.RoomTimeSlots.FindAsync(id);
+            if (slot == null) return NotFound();
+
+            _context.RoomTimeSlots.Remove(slot);
+            await _context.SaveChangesAsync();
+
+            return NoContent();
+        }
     }
 }

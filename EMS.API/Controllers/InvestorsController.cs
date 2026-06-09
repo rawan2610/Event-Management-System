@@ -123,5 +123,37 @@ namespace EMS.API.Controllers
 
             return NoContent();
         }
+
+
+
+        // PUT: api/investors/5
+        [HttpPut("{id}")]
+        public async Task<ActionResult> UpdateInvestor(int id, CreateInvestorDTO dto)
+        {
+            var investor = await _context.Investors
+                .Include(i => i.InvestorSectors)
+                .FirstOrDefaultAsync(i => i.InvestorID == id);
+            if (investor == null) return NotFound();
+
+            investor.Name = dto.Name;
+            investor.Mobile = dto.Mobile;
+
+            // Remove existing sectors and replace with new ones
+            _context.InvestorSectors.RemoveRange(investor.InvestorSectors);
+
+            foreach (var sectorDTO in dto.InvestorSectors)
+            {
+                _context.InvestorSectors.Add(new InvestorSector
+                {
+                    InvestorID = id,
+                    SectorID = sectorDTO.SectorID,
+                    TimeFrom = sectorDTO.TimeFrom,
+                    TimeTo = sectorDTO.TimeTo
+                });
+            }
+
+            await _context.SaveChangesAsync();
+            return Ok();
+        }
     }
 }

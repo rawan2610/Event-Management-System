@@ -123,5 +123,37 @@ namespace EMS.API.Controllers
 
             return NoContent();
         }
+
+
+
+        // PUT: api/presenters/5
+        [HttpPut("{id}")]
+        public async Task<ActionResult> UpdatePresenter(int id, CreatePresenterDTO dto)
+        {
+            var presenter = await _context.Presenters
+                .Include(p => p.PresenterSectors)
+                .FirstOrDefaultAsync(p => p.PresenterID == id);
+            if (presenter == null) return NotFound();
+
+            presenter.Name = dto.Name;
+            presenter.Mobile = dto.Mobile;
+
+            // Remove existing sectors and replace with new ones
+            _context.PresenterSectors.RemoveRange(presenter.PresenterSectors);
+
+            foreach (var sectorDTO in dto.PresenterSectors)
+            {
+                _context.PresenterSectors.Add(new PresenterSector
+                {
+                    PresenterID = id,
+                    SectorID = sectorDTO.SectorID,
+                    TimeFrom = sectorDTO.TimeFrom,
+                    TimeTo = sectorDTO.TimeTo
+                });
+            }
+
+            await _context.SaveChangesAsync();
+            return Ok();
+        }
     }
 }
