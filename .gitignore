@@ -1,0 +1,11 @@
+# Frontend
+ems-frontend/node_modules/
+ems-frontend/build/
+
+# Backend
+EMS.API/bin/
+EMS.API/obj/
+
+# General
+.env
+*.user
