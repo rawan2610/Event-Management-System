@@ -60,13 +60,7 @@ namespace EMS.API.Controllers
 
                 foreach (var presenterSector in matchingPresenters)
                 {
-                    // Check if presenter is already booked
-                    var presenterBooked = await _context.Reservations
-                        .AnyAsync(r => r.PresenterID == presenterSector.PresenterID);
-
-                    if (presenterBooked) continue;
-
-                    // Calculate time overlap
+                    // Calculate time overlap first
                     var overlapFrom = investorSector.TimeFrom > presenterSector.TimeFrom
                         ? investorSector.TimeFrom
                         : presenterSector.TimeFrom;
@@ -79,7 +73,32 @@ namespace EMS.API.Controllers
                     if (overlapTo <= overlapFrom) continue;
                     if ((overlapTo - overlapFrom).TotalHours < 1) continue;
 
-                    // Find available 1-hour slots within overlap
+                    // Check investor is not already booked during overlap
+                    var investorBooked = await _context.Reservations
+                        .Include(r => r.RoomTimeSlot)
+                        .AnyAsync(r => r.InvestorID == investorId &&
+                                       r.RoomTimeSlot.TimeFrom < overlapTo &&
+                                       r.RoomTimeSlot.TimeTo > overlapFrom);
+
+                    if (investorBooked) continue;
+
+                    // Check presenter is not already booked during overlap
+                    var presenterBooked = await _context.Reservations
+                        .Include(r => r.RoomTimeSlot)
+                        .AnyAsync(r => r.PresenterID == presenterSector.PresenterID &&
+                                       r.RoomTimeSlot.TimeFrom < overlapTo &&
+                                       r.RoomTimeSlot.TimeTo > overlapFrom);
+
+                    if (presenterBooked) continue;
+
+                    // Check investor and presenter haven't already met
+                    var alreadyMet = await _context.Reservations
+                        .AnyAsync(r => r.InvestorID == investorId &&
+                                       r.PresenterID == presenterSector.PresenterID);
+
+                    if (alreadyMet) continue;
+
+                    // Find available rooms within overlap
                     var availableSlots = await _context.RoomTimeSlots
                         .Include(s => s.ConferenceRoom)
                             .ThenInclude(r => r.Hotel)
@@ -115,9 +134,7 @@ namespace EMS.API.Controllers
 
             return Ok(results);
         }
-
         // POST: api/reservations
-        [HttpPost]
         [HttpPost]
         public async Task<ActionResult<ReservationResponseDTO>> CreateReservation(CreateReservationDTO dto)
         {
