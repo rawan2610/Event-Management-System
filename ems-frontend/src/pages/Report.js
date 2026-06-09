@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { toast } from 'react-toastify';
 import { getReservations } from '../services/api';
 
+
 export default function Report() {
   const [reservations, setReservations] = useState([]);
   const [filtered, setFiltered] = useState([]);
@@ -89,7 +90,7 @@ export default function Report() {
                     <td>{r.hotelName}</td>
                     <td>{r.roomName}</td>
                     <td>{r.timeFrom.substring(0, 5)} - {r.timeTo.substring(0, 5)}</td>
-                    <td>{new Date(r.reservationDate).toLocaleDateString()}</td>
+                    <td>{new Date(r.reservationDate).toLocaleDateString('en-GB')}</td>
                   </tr>
                 ))}
               </tbody>
