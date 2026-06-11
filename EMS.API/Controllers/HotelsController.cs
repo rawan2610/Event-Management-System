@@ -80,13 +80,30 @@ namespace EMS.API.Controllers
             var room = await _context.ConferenceRooms.FindAsync(dto.RoomID);
             if (room == null) return NotFound("Room not found");
 
+            // Check if time slot already exists for this room
+            var existingSlot = await _context.RoomTimeSlots
+                .AnyAsync(s => s.RoomID == dto.RoomID &&
+                               s.TimeFrom == dto.TimeFrom &&
+                               s.TimeTo == dto.TimeTo);
+
+            if (existingSlot)
+                return BadRequest("This time slot already exists for this room");
+
+            // Check if time slot overlaps with existing slots
+            var overlappingSlot = await _context.RoomTimeSlots
+                .AnyAsync(s => s.RoomID == dto.RoomID &&
+                               s.TimeFrom < dto.TimeTo &&
+                               s.TimeTo > dto.TimeFrom);
+
+            if (overlappingSlot)
+                return BadRequest("This time slot overlaps with an existing slot for this room");
+
             var slot = _mapper.Map<RoomTimeSlot>(dto);
             _context.RoomTimeSlots.Add(slot);
             await _context.SaveChangesAsync();
 
             return Ok(_mapper.Map<TimeSlotResponseDTO>(slot));
         }
-
         // DELETE: api/hotels/5
         [HttpDelete("{id}")]
         public async Task<IActionResult> DeleteHotel(int id)
