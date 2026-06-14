@@ -1,7 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { toast } from 'react-toastify';
-import { getReservations } from '../services/api';
-
+import { getReservations, cancelReservation } from '../services/api';
 
 export default function Report() {
   const [reservations, setReservations] = useState([]);
@@ -31,13 +30,38 @@ export default function Report() {
     finally { setLoading(false); }
   };
 
-  const sectorColors = {
-    'Finance': '#4361ee', 'IT': '#3a0ca3', 'Restaurants': '#f72585',
-    'Real Estate': '#7209b7', 'Retail': '#4cc9f0', 'Healthcare': '#06d6a0',
-    'Education': '#ffd166', 'Manufacturing': '#ef476f', 'Tourism': '#118ab2', 'Media': '#073b4c'
+  const handleCancel = async (id) => {
+    // Ask user to confirm before cancelling
+    if (!window.confirm('Are you sure you want to cancel this reservation? The time slot will become available again.')) return;
+    
+    try {
+      await cancelReservation(id);
+      toast.success('Reservation cancelled! Time slot is now available again.');
+      // Refresh the list after cancellation
+      fetchReservations();
+    } catch (err) {
+      toast.error(err.response?.data || 'Failed to cancel reservation');
+    }
   };
 
-  if (loading) return <div className="text-center py-5"><div className="spinner-border text-primary"></div></div>;
+  const sectorColors = {
+    'Finance': '#4361ee',
+    'IT': '#3a0ca3',
+    'Restaurants': '#f72585',
+    'Real Estate': '#7209b7',
+    'Retail': '#4cc9f0',
+    'Healthcare': '#06d6a0',
+    'Education': '#ffd166',
+    'Manufacturing': '#ef476f',
+    'Tourism': '#118ab2',
+    'Media': '#073b4c'
+  };
+
+  if (loading) return (
+    <div className="text-center py-5">
+      <div className="spinner-border text-primary"></div>
+    </div>
+  );
 
   return (
     <div>
@@ -48,10 +72,14 @@ export default function Report() {
         <span className="badge bg-primary fs-6">{filtered.length} Total</span>
       </div>
 
+      {/* Search Bar */}
       <div className="card border-0 shadow-sm mb-4">
         <div className="card-body">
-          <input className="form-control" placeholder="Search by investor, presenter, sector, hotel..."
-            value={search} onChange={e => setSearch(e.target.value)} />
+          <input
+            className="form-control"
+            placeholder="Search by investor, presenter, sector, hotel..."
+            value={search}
+            onChange={e => setSearch(e.target.value)} />
         </div>
       </div>
 
@@ -74,6 +102,7 @@ export default function Report() {
                   <th>Room</th>
                   <th>Time</th>
                   <th>Date</th>
+                  <th>Action</th>
                 </tr>
               </thead>
               <tbody>
@@ -83,14 +112,26 @@ export default function Report() {
                     <td><strong>{r.investorName}</strong></td>
                     <td>{r.presenterName}</td>
                     <td>
-                      <span className="badge" style={{ backgroundColor: sectorColors[r.sectorName] || '#666' }}>
+                      <span className="badge"
+                        style={{ backgroundColor: sectorColors[r.sectorName] || '#666' }}>
                         {r.sectorName}
                       </span>
                     </td>
                     <td>{r.hotelName}</td>
                     <td>{r.roomName}</td>
-                    <td>{r.timeFrom.substring(0, 5)} - {r.timeTo.substring(0, 5)}</td>
-                    <td>{new Date(r.reservationDate).toLocaleDateString('en-GB')}</td>
+                    <td>
+                      <i className="fas fa-clock me-1 text-primary"></i>
+                      {r.timeFrom.substring(0, 5)} - {r.timeTo.substring(0, 5)}
+                    </td>
+                    <td>{new Date(r.reservationDate).toLocaleDateString()}</td>
+                    <td>
+                      <button
+                        className="btn btn-sm btn-outline-danger"
+                        onClick={() => handleCancel(r.reservationID)}
+                        title="Cancel reservation">
+                        <i className="fas fa-times me-1"></i>Cancel
+                      </button>
+                    </td>
                   </tr>
                 ))}
               </tbody>

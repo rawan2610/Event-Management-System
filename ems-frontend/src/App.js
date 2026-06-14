@@ -11,12 +11,13 @@ import Investors from './pages/Investors';
 import Presenters from './pages/Presenters';
 import Reservations from './pages/Reservations';
 import Report from './pages/Report';
+import Settings from './pages/Settings';
 
 function App() {
   return (
     <Router>
       <div className="min-vh-100" style={{ backgroundColor: '#f8f9fa' }}>
-        
+
         {/* Navbar */}
         <nav className="navbar navbar-expand-lg navbar-dark" style={{ backgroundColor: '#1a1a2e' }}>
           <div className="container">
@@ -54,6 +55,12 @@ function App() {
                     <i className="fas fa-chart-bar me-1"></i> Report
                   </Link>
                 </li>
+
+                <li className="nav-item">
+                  <Link className="nav-link" to="/settings">
+                    <i className="fas fa-cog me-1"></i> Settings
+                  </Link>
+                </li>
               </ul>
             </div>
           </div>
@@ -68,6 +75,7 @@ function App() {
             <Route path="/presenters" element={<Presenters />} />
             <Route path="/reservations" element={<Reservations />} />
             <Route path="/report" element={<Report />} />
+            <Route path="/settings" element={<Settings />} />
           </Routes>
         </div>
 
@@ -95,6 +103,8 @@ function Home() {
           { to: '/presenters', icon: 'fa-microphone', label: 'Presenters', color: '#7209b7', desc: 'Manage presenter information' },
           { to: '/reservations', icon: 'fa-calendar-plus', label: 'Reservations', color: '#f72585', desc: 'Book meetings between investors and presenters' },
           { to: '/report', icon: 'fa-chart-bar', label: 'Report', color: '#4cc9f0', desc: 'View all reservations' },
+          { to: '/settings', icon: 'fa-cog', label: 'Settings', color: '#2d6a4f', desc: 'Configure slot duration and system settings' },
+        
         ].map((item) => (
           <div className="col-md-4 col-sm-6" key={item.to}>
             <Link to={item.to} className="text-decoration-none">

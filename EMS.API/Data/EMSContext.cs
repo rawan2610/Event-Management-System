@@ -1,5 +1,6 @@
 ﻿using EMS.API.Models;
 using Microsoft.EntityFrameworkCore;
+using static System.Runtime.InteropServices.JavaScript.JSType;
 
 namespace EMS.API.Data
 {
@@ -17,6 +18,7 @@ namespace EMS.API.Data
         public DbSet<PresenterSector> PresenterSectors { get; set; }
         public DbSet<Reservation> Reservations { get; set; }
 
+        public DbSet<Setting> Settings { get; set; }
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
             base.OnModelCreating(modelBuilder);
@@ -88,6 +90,11 @@ namespace EMS.API.Data
                 .HasOne(r => r.Sector)
                 .WithMany(s => s.Reservations)
                 .HasForeignKey(r => r.SectorID);
+
+            // Seed default setting
+            modelBuilder.Entity<Setting>().HasData(
+                new Setting { SettingID = 1, Key = "SlotDurationMinutes", Value = "60" }
+            );
 
             // Seed Sectors
             modelBuilder.Entity<Sector>().HasData(

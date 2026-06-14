@@ -4,6 +4,28 @@ const API = axios.create({
   baseURL: 'http://localhost:5232/api',
 });
 
+// Add a response interceptor to handle errors consistently
+API.interceptors.response.use(
+  (response) => response,
+  (error) => {
+    // If the server returned a response with error message
+    if (error.response && error.response.data) {
+      // Extract the error message from different possible formats
+      const errorMessage = error.response.data.message || 
+                          error.response.data.title || 
+                          error.response.data.error ||
+                          error.message;
+      
+      // Create a custom error with the server message
+      const customError = new Error(errorMessage);
+      customError.response = error.response;
+      customError.status = error.response.status;
+      return Promise.reject(customError);
+    }
+    return Promise.reject(error);
+  }
+);
+
 // Hotels
 export const getHotels = () => API.get('/hotels');
 export const createHotel = (data) => API.post('/hotels', data);
@@ -11,13 +33,11 @@ export const deleteHotel = (id) => API.delete(`/hotels/${id}`);
 export const addRoom = (data) => API.post('/hotels/rooms', data);
 export const addTimeSlot = (data) => API.post('/hotels/timeslots', data);
 
-
 // Hotel updates
 export const updateHotel = (id, data) => API.put(`/hotels/${id}`, data);
 export const updateRoom = (id, data) => API.put(`/hotels/rooms/${id}`, data);
 export const deleteRoom = (id) => API.delete(`/hotels/rooms/${id}`);
 export const deleteTimeSlot = (id) => API.delete(`/hotels/timeslots/${id}`);
-
 
 // Sectors
 export const getSectors = () => API.get('/sectors');
@@ -34,11 +54,18 @@ export const getPresenters = () => API.get('/presenters');
 export const getPresenter = (id) => API.get(`/presenters/${id}`);
 export const createPresenter = (data) => API.post('/presenters', data);
 export const deletePresenter = (id) => API.delete(`/presenters/${id}`);
-
 export const updatePresenter = (id, data) => API.put(`/presenters/${id}`, data);
+
 // Reservations
 export const getReservations = () => API.get('/reservations');
 export const getMatches = (investorId) => API.get(`/reservations/matches/${investorId}`);
 export const createReservation = (data) => API.post('/reservations', data);
+export const cancelReservation = (id) => API.delete(`/reservations/${id}`);
+
+// Settings
+export const getSettings = () => API.get('/settings');
+export const getSetting = (key) => API.get(`/settings/${key}`);
+export const updateSetting = (key, data) => API.put(`/settings/${key}`, data);
+export const regenerateSlots = (roomID, data) => API.post(`/hotels/rooms/${roomID}/regenerate`, data);
 
 export default API;

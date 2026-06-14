@@ -18,6 +18,8 @@
     {
         public string RoomName { get; set; } = string.Empty;
         public int HotelID { get; set; }
+        public TimeOnly? AvailableFrom { get; set; }
+        public TimeOnly? AvailableTo { get; set; }
     }
 
     public class RoomResponseDTO
@@ -42,5 +44,11 @@
         public TimeOnly TimeFrom { get; set; }
         public TimeOnly TimeTo { get; set; }
         public bool IsAvailable { get; set; }
+    }
+
+    public class RegenerateSlotsDTO
+    {
+        public TimeOnly AvailableFrom { get; set; }
+        public TimeOnly AvailableTo { get; set; }
     }
 }

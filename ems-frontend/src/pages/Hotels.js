@@ -1,20 +1,22 @@
+//find old approach at the end
+
 import React, { useState, useEffect } from 'react';
 import { toast } from 'react-toastify';
-import { getHotels, createHotel, deleteHotel, addRoom, addTimeSlot, updateHotel, updateRoom, deleteRoom, deleteTimeSlot } from '../services/api';
+import { getHotels, createHotel, deleteHotel, addRoom, updateHotel, updateRoom, deleteRoom, deleteTimeSlot, regenerateSlots } from '../services/api';
 
 export default function Hotels() {
   const [hotels, setHotels] = useState([]);
   const [loading, setLoading] = useState(true);
   const [showHotelModal, setShowHotelModal] = useState(false);
   const [showRoomModal, setShowRoomModal] = useState(false);
-  const [showSlotModal, setShowSlotModal] = useState(false);
+  const [showRegenerateModal, setShowRegenerateModal] = useState(false);
   const [selectedHotelID, setSelectedHotelID] = useState(null);
-  const [selectedRoomID, setSelectedRoomID] = useState(null);
   const [editingHotel, setEditingHotel] = useState(null);
   const [editingRoom, setEditingRoom] = useState(null);
+  const [selectedRoomForRegenerate, setSelectedRoomForRegenerate] = useState(null);
   const [hotelForm, setHotelForm] = useState({ hotelName: '', address: '' });
-  const [roomForm, setRoomForm] = useState({ roomName: '' });
-  const [slotForm, setSlotForm] = useState({ timeFrom: '', timeTo: '' });
+  const [roomForm, setRoomForm] = useState({ roomName: '', availableFrom: '', availableTo: '' });
+  const [regenerateForm, setRegenerateForm] = useState({ availableFrom: '', availableTo: '' });
 
   useEffect(() => { fetchHotels(); }, []);
 
@@ -50,25 +52,40 @@ export default function Hotels() {
         await updateRoom(editingRoom.roomID, { roomName: roomForm.roomName, hotelID: selectedHotelID });
         toast.success('Room updated successfully!');
       } else {
-        await addRoom({ roomName: roomForm.roomName, hotelID: selectedHotelID });
+        await addRoom({
+          roomName: roomForm.roomName,
+          hotelID: selectedHotelID,
+          availableFrom: roomForm.availableFrom ? roomForm.availableFrom + ':00' : null,
+          availableTo: roomForm.availableTo ? roomForm.availableTo + ':00' : null
+        });
         toast.success('Room added successfully!');
       }
       setShowRoomModal(false);
-      setRoomForm({ roomName: '' });
+      setRoomForm({ roomName: '', availableFrom: '', availableTo: '' });
       setEditingRoom(null);
       fetchHotels();
-    } catch { toast.error('Failed to save room'); }
+    } catch (err) {
+      toast.error(err.response?.data || 'Failed to save room');
+    }
   };
 
-  const handleAddSlot = async () => {
-    if (!slotForm.timeFrom || !slotForm.timeTo) return toast.error('Please fill all time fields');
+  const handleRegenerate = async () => {
+    if (!regenerateForm.availableFrom || !regenerateForm.availableTo)
+      return toast.error('Please fill both time fields');
+    if (regenerateForm.availableFrom >= regenerateForm.availableTo)
+      return toast.error('Start time must be before end time');
     try {
-      await addTimeSlot({ roomID: selectedRoomID, timeFrom: slotForm.timeFrom + ':00', timeTo: slotForm.timeTo + ':00' });
-      toast.success('Time slot added successfully!');
-      setShowSlotModal(false);
-      setSlotForm({ timeFrom: '', timeTo: '' });
+      await regenerateSlots(selectedRoomForRegenerate.roomID, {
+        availableFrom: regenerateForm.availableFrom + ':00',
+        availableTo: regenerateForm.availableTo + ':00'
+      });
+      toast.success('Time slots regenerated successfully!');
+      setShowRegenerateModal(false);
+      setRegenerateForm({ availableFrom: '', availableTo: '' });
       fetchHotels();
-    } catch { toast.error('Failed to add time slot'); }
+    } catch (err) {
+      toast.error(err.response?.data || 'Failed to regenerate slots');
+    }
   };
 
   const handleDeleteHotel = async (id) => {
@@ -107,7 +124,7 @@ export default function Hotels() {
   const openEditRoom = (room, hotelID) => {
     setEditingRoom(room);
     setSelectedHotelID(hotelID);
-    setRoomForm({ roomName: room.roomName });
+    setRoomForm({ roomName: room.roomName, availableFrom: '', availableTo: '' });
     setShowRoomModal(true);
   };
 
@@ -123,7 +140,11 @@ export default function Hotels() {
         <h2 className="fw-bold" style={{ color: '#1a1a2e' }}>
           <i className="fas fa-hotel me-2"></i>Hotels & Conference Rooms
         </h2>
-        <button className="btn btn-primary" onClick={() => { setEditingHotel(null); setHotelForm({ hotelName: '', address: '' }); setShowHotelModal(true); }}>
+        <button className="btn btn-primary" onClick={() => {
+          setEditingHotel(null);
+          setHotelForm({ hotelName: '', address: '' });
+          setShowHotelModal(true);
+        }}>
           <i className="fas fa-plus me-2"></i>Add Hotel
         </button>
       </div>
@@ -136,6 +157,7 @@ export default function Hotels() {
       ) : (
         hotels.map(hotel => (
           <div key={hotel.hotelID} className="card shadow-sm mb-4 border-0">
+            {/* Hotel Header */}
             <div className="card-header d-flex justify-content-between align-items-center"
               style={{ backgroundColor: '#1a1a2e', color: 'white' }}>
               <div>
@@ -145,7 +167,12 @@ export default function Hotels() {
               </div>
               <div>
                 <button className="btn btn-sm btn-light me-2"
-                  onClick={() => { setSelectedHotelID(hotel.hotelID); setEditingRoom(null); setRoomForm({ roomName: '' }); setShowRoomModal(true); }}>
+                  onClick={() => {
+                    setSelectedHotelID(hotel.hotelID);
+                    setEditingRoom(null);
+                    setRoomForm({ roomName: '', availableFrom: '', availableTo: '' });
+                    setShowRoomModal(true);
+                  }}>
                   <i className="fas fa-plus me-1"></i>Add Room
                 </button>
                 <button className="btn btn-sm btn-warning me-2" onClick={() => openEditHotel(hotel)}>
@@ -156,6 +183,8 @@ export default function Hotels() {
                 </button>
               </div>
             </div>
+
+            {/* Hotel Body - Rooms */}
             <div className="card-body">
               {hotel.conferenceRooms.length === 0 ? (
                 <p className="text-muted small">No rooms added yet.</p>
@@ -165,25 +194,38 @@ export default function Hotels() {
                     <div key={room.roomID} className="col-md-4">
                       <div className="card border h-100">
                         <div className="card-body">
+                          {/* Room Header */}
                           <div className="d-flex justify-content-between align-items-center mb-2">
                             <h6 className="fw-bold mb-0">
                               <i className="fas fa-door-open me-2 text-primary"></i>{room.roomName}
                             </h6>
                             <div>
-                              <button className="btn btn-sm btn-outline-primary me-1"
-                                onClick={() => { setSelectedRoomID(room.roomID); setSlotForm({ timeFrom: '', timeTo: '' }); setShowSlotModal(true); }}>
-                                <i className="fas fa-plus"></i>
-                              </button>
+                              {/* Edit Room */}
                               <button className="btn btn-sm btn-outline-warning me-1"
-                                onClick={() => openEditRoom(room, hotel.hotelID)}>
+                                onClick={() => openEditRoom(room, hotel.hotelID)}
+                                title="Edit room name">
                                 <i className="fas fa-edit"></i>
                               </button>
+                              {/* Regenerate Slots */}
+                              <button className="btn btn-sm btn-outline-success me-1"
+                                onClick={() => {
+                                  setSelectedRoomForRegenerate(room);
+                                  setRegenerateForm({ availableFrom: '', availableTo: '' });
+                                  setShowRegenerateModal(true);
+                                }}
+                                title="Regenerate time slots">
+                                <i className="fas fa-redo"></i>
+                              </button>
+                              {/* Delete Room */}
                               <button className="btn btn-sm btn-outline-danger"
-                                onClick={() => handleDeleteRoom(room.roomID)}>
+                                onClick={() => handleDeleteRoom(room.roomID)}
+                                title="Delete room">
                                 <i className="fas fa-trash"></i>
                               </button>
                             </div>
                           </div>
+
+                          {/* Time Slots */}
                           <div className="d-flex flex-wrap gap-1">
                             {room.roomTimeSlots.length === 0 ? (
                               <span className="text-muted small">No time slots</span>
@@ -191,10 +233,11 @@ export default function Hotels() {
                               room.roomTimeSlots.map(slot => (
                                 <span key={slot.slotID}
                                   className={`badge ${slot.isAvailable ? 'bg-success' : 'bg-danger'}`}
-                                  style={{ cursor: 'pointer' }}
-                                  onClick={() => handleDeleteSlot(slot.slotID)}
-                                  title="Click to delete">
-                                  {slot.timeFrom.substring(0, 5)} - {slot.timeTo.substring(0, 5)} ×
+                                  style={{ cursor: slot.isAvailable ? 'pointer' : 'default' }}
+                                  onClick={() => slot.isAvailable && handleDeleteSlot(slot.slotID)}
+                                  title={slot.isAvailable ? 'Click to delete' : 'Reserved - cannot delete'}>
+                                  {slot.timeFrom.substring(0, 5)} - {slot.timeTo.substring(0, 5)}
+                                  {slot.isAvailable ? ' ×' : ' 🔒'}
                                 </span>
                               ))
                             )}
@@ -265,8 +308,31 @@ export default function Hotels() {
                   <label className="form-label fw-bold">Room Name *</label>
                   <input className="form-control" placeholder="e.g. Room 1"
                     value={roomForm.roomName}
-                    onChange={e => setRoomForm({ roomName: e.target.value })} />
+                    onChange={e => setRoomForm({ ...roomForm, roomName: e.target.value })} />
                 </div>
+                {!editingRoom && (
+                  <>
+                    <div className="alert alert-info small">
+                      <i className="fas fa-info-circle me-1"></i>
+                      The system will automatically divide the availability window into
+                      time slots based on the slot duration in Settings.
+                    </div>
+                    <div className="row g-2">
+                      <div className="col-6">
+                        <label className="form-label fw-bold">Available From</label>
+                        <input type="time" className="form-control"
+                          value={roomForm.availableFrom}
+                          onChange={e => setRoomForm({ ...roomForm, availableFrom: e.target.value })} />
+                      </div>
+                      <div className="col-6">
+                        <label className="form-label fw-bold">Available To</label>
+                        <input type="time" className="form-control"
+                          value={roomForm.availableTo}
+                          onChange={e => setRoomForm({ ...roomForm, availableTo: e.target.value })} />
+                      </div>
+                    </div>
+                  </>
+                )}
               </div>
               <div className="modal-footer">
                 <button className="btn btn-secondary" onClick={() => setShowRoomModal(false)}>Cancel</button>
@@ -280,33 +346,43 @@ export default function Hotels() {
         </div>
       )}
 
-      {/* Add Time Slot Modal */}
-      {showSlotModal && (
+      {/* Regenerate Slots Modal */}
+      {showRegenerateModal && (
         <div className="modal show d-block" style={{ backgroundColor: 'rgba(0,0,0,0.5)' }}>
           <div className="modal-dialog">
             <div className="modal-content">
               <div className="modal-header" style={{ backgroundColor: '#1a1a2e', color: 'white' }}>
-                <h5 className="modal-title"><i className="fas fa-clock me-2"></i>Add Time Slot</h5>
-                <button className="btn-close btn-close-white" onClick={() => setShowSlotModal(false)}></button>
+                <h5 className="modal-title">
+                  <i className="fas fa-redo me-2"></i>
+                  Regenerate Slots — {selectedRoomForRegenerate?.roomName}
+                </h5>
+                <button className="btn-close btn-close-white" onClick={() => setShowRegenerateModal(false)}></button>
               </div>
               <div className="modal-body">
-                <div className="mb-3">
-                  <label className="form-label fw-bold">From</label>
-                  <input type="time" className="form-control"
-                    value={slotForm.timeFrom}
-                    onChange={e => setSlotForm({ ...slotForm, timeFrom: e.target.value })} />
+                <div className="alert alert-warning small">
+                  <i className="fas fa-exclamation-triangle me-1"></i>
+                  This will <strong>delete all existing available slots</strong> and generate new ones.
+                  Reserved slots cannot be deleted.
                 </div>
-                <div className="mb-3">
-                  <label className="form-label fw-bold">To</label>
-                  <input type="time" className="form-control"
-                    value={slotForm.timeTo}
-                    onChange={e => setSlotForm({ ...slotForm, timeTo: e.target.value })} />
+                <div className="row g-2">
+                  <div className="col-6">
+                    <label className="form-label fw-bold">Available From</label>
+                    <input type="time" className="form-control"
+                      value={regenerateForm.availableFrom}
+                      onChange={e => setRegenerateForm({ ...regenerateForm, availableFrom: e.target.value })} />
+                  </div>
+                  <div className="col-6">
+                    <label className="form-label fw-bold">Available To</label>
+                    <input type="time" className="form-control"
+                      value={regenerateForm.availableTo}
+                      onChange={e => setRegenerateForm({ ...regenerateForm, availableTo: e.target.value })} />
+                  </div>
                 </div>
               </div>
               <div className="modal-footer">
-                <button className="btn btn-secondary" onClick={() => setShowSlotModal(false)}>Cancel</button>
-                <button className="btn btn-primary" onClick={handleAddSlot}>
-                  <i className="fas fa-plus me-2"></i>Add Slot
+                <button className="btn btn-secondary" onClick={() => setShowRegenerateModal(false)}>Cancel</button>
+                <button className="btn btn-success" onClick={handleRegenerate}>
+                  <i className="fas fa-redo me-2"></i>Regenerate Slots
                 </button>
               </div>
             </div>
@@ -316,3 +392,42 @@ export default function Hotels() {
     </div>
   );
 }
+
+  // old approach
+  // const handleAddRoom = async () => {
+  //   if (!roomForm.roomName) return toast.error('Room name is required');
+  //   try {
+  //     if (editingRoom) {
+  //       await updateRoom(editingRoom.roomID, { roomName: roomForm.roomName, hotelID: selectedHotelID });
+  //       toast.success('Room updated successfully!');
+  //     } else {
+  //       await addRoom({ roomName: roomForm.roomName, hotelID: selectedHotelID });
+  //       toast.success('Room added successfully!');
+  //     }
+  //     setShowRoomModal(false);
+  //     setRoomForm({ roomName: '' });
+  //     setEditingRoom(null);
+  //     fetchHotels();
+  //   } catch { toast.error('Failed to save room'); }
+  // };
+
+
+  // {/* <div>
+  //               <button className="btn btn-sm btn-light me-2"
+  //                 onClick={() => {
+  //                   setSelectedHotelID(hotel.hotelID);
+  //                   setEditingRoom(null);
+  //                   setRoomForm({ roomName: '', availableFrom: '', availableTo: '' });
+  //                   setShowRoomModal(true);
+  //                 }}>
+  //                 <i className="fas fa-plus me-1"></i>Add Room
+  //               </button>
+  //               <button className="btn btn-sm btn-warning me-2" onClick={() => openEditHotel(hotel)}>
+  //                 <i className="fas fa-edit"></i>
+  //               </button>
+  //               <button className="btn btn-sm btn-danger" onClick={() => handleDeleteHotel(hotel.hotelID)}>
+  //                 <i className="fas fa-trash"></i>
+  //               </button>
+  //             </div> */}
+
+  

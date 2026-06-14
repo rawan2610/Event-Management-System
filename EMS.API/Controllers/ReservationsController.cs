@@ -215,5 +215,47 @@ namespace EMS.API.Controllers
                 return StatusCode(500, $"An error occurred: {ex.Message}");
             }
         }
+
+        // DELETE: api/reservations/5
+        [HttpDelete("{id}")]
+        public async Task<IActionResult> CancelReservation(int id)
+        {
+            // We use a transaction because we're doing 2 things:
+            // 1. Freeing the slot
+            // 2. Deleting the reservation
+            // If either fails, both are rolled back — no partial changes
+            using var transaction = await _context.Database.BeginTransactionAsync();
+
+            try
+            {
+                // Find the reservation AND its time slot together
+                // We need the slot so we can unlock it
+                var reservation = await _context.Reservations
+                    .Include(r => r.RoomTimeSlot)
+                    .FirstOrDefaultAsync(r => r.ReservationID == id);
+
+                if (reservation == null) return NotFound("Reservation not found");
+
+                // Unlock the time slot — makes it green again
+                reservation.RoomTimeSlot.IsAvailable = true;
+
+                // Remove the reservation record from database
+                _context.Reservations.Remove(reservation);
+
+                // Save both changes together
+                await _context.SaveChangesAsync();
+
+                // Confirm transaction — both changes are permanent
+                await transaction.CommitAsync();
+
+                return Ok("Reservation cancelled successfully");
+            }
+            catch (Exception ex)
+            {
+                // If anything fails, undo everything
+                await transaction.RollbackAsync();
+                return StatusCode(500, $"An error occurred: {ex.Message}");
+            }
+        }
     }
-    }
+}

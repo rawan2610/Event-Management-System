@@ -11,6 +11,7 @@ export default function Investors() {
   const [editingInvestor, setEditingInvestor] = useState(null);
   const [form, setForm] = useState({ name: '', mobile: '' });
   const [sectorRows, setSectorRows] = useState([{ sectorID: null, timeFrom: '', timeTo: '' }]);
+  const [conflicts, setConflicts] = useState([]);
 
   useEffect(() => { fetchData(); }, []);
 
@@ -19,45 +20,128 @@ export default function Investors() {
       const [invRes, secRes] = await Promise.all([getInvestors(), getSectors()]);
       setInvestors(invRes.data);
       setSectors(secRes.data.map(s => ({ value: s.sectorID, label: s.sectorName })));
-    } catch { toast.error('Failed to load data'); }
-    finally { setLoading(false); }
+    } catch { 
+      toast.error('Failed to load data'); 
+    } finally { 
+      setLoading(false); 
+    }
   };
 
-  const addSectorRow = () => setSectorRows([...sectorRows, { sectorID: null, timeFrom: '', timeTo: '' }]);
-  const removeSectorRow = (index) => setSectorRows(sectorRows.filter((_, i) => i !== index));
+  // Check for time conflicts between sectors
+  const checkForConflicts = (rows) => {
+    const newConflicts = [];
+    
+    for (let i = 0; i < rows.length; i++) {
+      for (let j = i + 1; j < rows.length; j++) {
+        const sector1 = rows[i];
+        const sector2 = rows[j];
+        
+        // Only check if both rows have complete data
+        if (sector1.timeFrom && sector1.timeTo && sector2.timeFrom && sector2.timeTo && 
+            sector1.sectorID && sector2.sectorID) {
+          
+          // Check if time ranges overlap
+          if (sector1.timeFrom < sector2.timeTo && sector2.timeFrom < sector1.timeTo) {
+            const sector1Name = sectors.find(s => s.value === sector1.sectorID)?.label || 'Sector';
+            const sector2Name = sectors.find(s => s.value === sector2.sectorID)?.label || 'Sector';
+            newConflicts.push({
+              indices: [i, j],
+              message: `${sector1Name} (${sector1.timeFrom} - ${sector1.timeTo}) overlaps with ${sector2Name} (${sector2.timeFrom} - ${sector2.timeTo})`
+            });
+          }
+        }
+      }
+    }
+    
+    setConflicts(newConflicts);
+    return newConflicts.length > 0;
+  };
+
+  const addSectorRow = () => {
+    const newRows = [...sectorRows, { sectorID: null, timeFrom: '', timeTo: '' }];
+    setSectorRows(newRows);
+    checkForConflicts(newRows);
+  };
+
+  const removeSectorRow = (index) => {
+    const newRows = sectorRows.filter((_, i) => i !== index);
+    setSectorRows(newRows);
+    checkForConflicts(newRows);
+  };
+
   const updateSectorRow = (index, field, value) => {
     const updated = [...sectorRows];
     updated[index][field] = value;
     setSectorRows(updated);
+    checkForConflicts(updated);
   };
 
   const openAddModal = () => {
     setEditingInvestor(null);
     setForm({ name: '', mobile: '' });
     setSectorRows([{ sectorID: null, timeFrom: '', timeTo: '' }]);
+    setConflicts([]);
     setShowModal(true);
   };
 
   const openEditModal = (investor) => {
     setEditingInvestor(investor);
     setForm({ name: investor.name, mobile: investor.mobile });
-    setSectorRows(investor.investorSectors.map(s => ({
+    const rows = investor.investorSectors.map(s => ({
       sectorID: s.sectorID,
       timeFrom: s.timeFrom.substring(0, 5),
       timeTo: s.timeTo.substring(0, 5)
-    })));
+    }));
+    setSectorRows(rows);
+    setConflicts([]);
     setShowModal(true);
   };
 
+  const validateForm = () => {
+    if (!form.name.trim()) {
+      toast.error('Name is required');
+      return false;
+    }
+    if (!form.mobile.trim()) {
+      toast.error('Mobile is required');
+      return false;
+    }
+    if (!form.mobile.match(/^01[0-9]{9}$/)) {
+      toast.error('Please enter a valid Egyptian mobile number (e.g., 01001234567)');
+      return false;
+    }
+    
+    // Check if any sector row is incomplete
+    const incompleteRow = sectorRows.find(r => !r.sectorID || !r.timeFrom || !r.timeTo);
+    if (incompleteRow) {
+      toast.error('Please complete all sector rows (sector, start time, and end time)');
+      return false;
+    }
+    
+    // Validate time ranges for each sector
+    for (const row of sectorRows) {
+      if (row.timeFrom >= row.timeTo) {
+        const sectorName = sectors.find(s => s.value === row.sectorID)?.label || 'Sector';
+        toast.error(`Invalid time range for ${sectorName}: Start time must be before end time`);
+        return false;
+      }
+    }
+    
+    // Check for conflicts
+    if (conflicts.length > 0) {
+      toast.error(`Time conflict detected: ${conflicts[0].message}. Investor cannot be in two meetings at the same time.`);
+      return false;
+    }
+    
+    return true;
+  };
+
   const handleSubmit = async () => {
-    if (!form.name) return toast.error('Name is required');
-    if (!form.mobile) return toast.error('Mobile is required');
-    if (sectorRows.some(r => !r.sectorID || !r.timeFrom || !r.timeTo))
-      return toast.error('Please complete all sector rows');
+    if (!validateForm()) return;
 
     const payload = {
-      name: form.name,
-      mobile: form.mobile,
+      name: form.name.trim(),
+      mobile: form.mobile.trim(),
       investorSectors: sectorRows.map(r => ({
         sectorID: r.sectorID,
         timeFrom: r.timeFrom + ':00',
@@ -75,19 +159,31 @@ export default function Investors() {
       }
       setShowModal(false);
       fetchData();
-    } catch { toast.error('Failed to save investor'); }
+    } catch (error) {
+      // Display the specific error message from the API
+      const errorMessage = error.response?.data?.message || error.message || 'Failed to save investor';
+      toast.error(errorMessage);
+      console.error('Error details:', error.response?.data);
+    }
   };
 
   const handleDelete = async (id) => {
-    if (!window.confirm('Delete this investor?')) return;
+    if (!window.confirm('Are you sure you want to delete this investor?')) return;
     try {
       await deleteInvestor(id);
-      toast.success('Investor deleted!');
+      toast.success('Investor deleted successfully!');
       fetchData();
-    } catch { toast.error('Failed to delete investor'); }
+    } catch (error) {
+      const errorMessage = error.response?.data?.message || error.message || 'Failed to delete investor';
+      toast.error(errorMessage);
+    }
   };
 
-  if (loading) return <div className="text-center py-5"><div className="spinner-border text-primary"></div></div>;
+  if (loading) return (
+    <div className="text-center py-5">
+      <div className="spinner-border text-primary" role="status"></div>
+    </div>
+  );
 
   return (
     <div>
@@ -103,7 +199,7 @@ export default function Investors() {
       {investors.length === 0 ? (
         <div className="text-center py-5 text-muted">
           <i className="fas fa-briefcase fa-3x mb-3"></i>
-          <p>No investors added yet.</p>
+          <p>No investors added yet. Click "Add Investor" to get started.</p>
         </div>
       ) : (
         <div className="row g-3">
@@ -129,9 +225,10 @@ export default function Investors() {
                       </button>
                     </div>
                   </div>
-                  <div className="d-flex flex-wrap gap-1">
+                  <div className="d-flex flex-wrap gap-1 mt-2">
                     {investor.investorSectors.map(s => (
                       <span key={s.investorSectorID} className="badge bg-primary">
+                        <i className="fas fa-chart-line me-1"></i>
                         {s.sectorName} ({s.timeFrom.substring(0, 5)} - {s.timeTo.substring(0, 5)})
                       </span>
                     ))}
@@ -157,58 +254,105 @@ export default function Investors() {
               <div className="modal-body">
                 <div className="row g-3 mb-4">
                   <div className="col-md-6">
-                    <label className="form-label fw-bold">Name *</label>
-                    <input className="form-control" placeholder="Investor name"
-                      value={form.name} onChange={e => setForm({ ...form, name: e.target.value })} />
+                    <label className="form-label fw-bold">
+                      <i className="fas fa-user me-1"></i>Name *
+                    </label>
+                    <input 
+                      type="text"
+                      className="form-control" 
+                      placeholder="e.g., Ahmed Mohamed"
+                      value={form.name} 
+                      onChange={e => setForm({ ...form, name: e.target.value })} 
+                    />
                   </div>
                   <div className="col-md-6">
-                    <label className="form-label fw-bold">Mobile *</label>
-                    <input className="form-control" placeholder="e.g. 01001234567"
-                      value={form.mobile} onChange={e => setForm({ ...form, mobile: e.target.value })} />
+                    <label className="form-label fw-bold">
+                      <i className="fas fa-phone me-1"></i>Mobile *
+                    </label>
+                    <input 
+                      type="tel"
+                      className="form-control" 
+                      placeholder="e.g., 01001234567"
+                      value={form.mobile} 
+                      onChange={e => setForm({ ...form, mobile: e.target.value })} 
+                    />
                   </div>
                 </div>
 
                 <div className="d-flex justify-content-between align-items-center mb-2">
-                  <h6 className="fw-bold mb-0">Sectors & Availability</h6>
+                  <h6 className="fw-bold mb-0">
+                    <i className="fas fa-chart-line me-2"></i>Sectors & Availability
+                  </h6>
                   <button className="btn btn-sm btn-outline-primary" onClick={addSectorRow}>
                     <i className="fas fa-plus me-1"></i>Add Sector
                   </button>
                 </div>
 
-                {sectorRows.map((row, index) => (
-                  <div key={index} className="row g-2 mb-2 align-items-center">
-                    <div className="col-md-5">
-                      <Select
-                        options={sectors}
-                        placeholder="Select sector..."
-                        value={sectors.find(s => s.value === row.sectorID) || null}
-                        onChange={opt => updateSectorRow(index, 'sectorID', opt.value)}
-                      />
-                    </div>
-                    <div className="col-md-3">
-                      <input type="time" className="form-control"
-                        value={row.timeFrom}
-                        onChange={e => updateSectorRow(index, 'timeFrom', e.target.value)} />
-                    </div>
-                    <div className="col-md-3">
-                      <input type="time" className="form-control"
-                        value={row.timeTo}
-                        onChange={e => updateSectorRow(index, 'timeTo', e.target.value)} />
-                    </div>
-                    <div className="col-md-1">
-                      {sectorRows.length > 1 && (
-                        <button className="btn btn-sm btn-outline-danger" onClick={() => removeSectorRow(index)}>
-                          <i className="fas fa-times"></i>
-                        </button>
-                      )}
-                    </div>
+                {conflicts.length > 0 && (
+                  <div className="alert alert-warning alert-dismissible fade show mb-3" role="alert">
+                    <i className="fas fa-exclamation-triangle me-2"></i>
+                    <strong>Time Conflict Detected!</strong> {conflicts[0].message}
+                    <button type="button" className="btn-close" onClick={() => setConflicts([])}></button>
                   </div>
-                ))}
+                )}
+
+                {sectorRows.map((row, index) => {
+                  const hasConflict = conflicts.some(c => c.indices.includes(index));
+                  return (
+                    <div key={index} className={`row g-2 mb-2 align-items-center ${hasConflict ? 'border border-danger rounded p-1' : ''}`}>
+                      <div className="col-md-5">
+                        <Select
+                          options={sectors}
+                          placeholder="Select sector..."
+                          value={sectors.find(s => s.value === row.sectorID) || null}
+                          onChange={opt => updateSectorRow(index, 'sectorID', opt.value)}
+                          isClearable
+                        />
+                      </div>
+                      <div className="col-md-3">
+                        <input 
+                          type="time" 
+                          className="form-control"
+                          value={row.timeFrom}
+                          onChange={e => updateSectorRow(index, 'timeFrom', e.target.value)} 
+                        />
+                      </div>
+                      <div className="col-md-3">
+                        <input 
+                          type="time" 
+                          className="form-control"
+                          value={row.timeTo}
+                          onChange={e => updateSectorRow(index, 'timeTo', e.target.value)} 
+                        />
+                      </div>
+                      <div className="col-md-1">
+                        {sectorRows.length > 1 && (
+                          <button 
+                            className="btn btn-sm btn-outline-danger" 
+                            onClick={() => removeSectorRow(index)}
+                            title="Remove sector"
+                          >
+                            <i className="fas fa-times"></i>
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
+
+                {sectorRows.length === 0 && (
+                  <div className="text-center py-3 text-muted">
+                    <i className="fas fa-info-circle me-1"></i>
+                    Click "Add Sector" to add sectors for this investor
+                  </div>
+                )}
               </div>
               <div className="modal-footer">
-                <button className="btn btn-secondary" onClick={() => setShowModal(false)}>Cancel</button>
+                <button className="btn btn-secondary" onClick={() => setShowModal(false)}>
+                  <i className="fas fa-times me-2"></i>Cancel
+                </button>
                 <button className="btn btn-primary" onClick={handleSubmit}>
-                  <i className={`fas ${editingInvestor ? 'fa-save' : 'fa-plus'} me-2`}></i>
+                  <i className={`fas ${editingInvestor ? 'fa-save' : 'fa-save'} me-2`}></i>
                   {editingInvestor ? 'Update Investor' : 'Save Investor'}
                 </button>
               </div>
